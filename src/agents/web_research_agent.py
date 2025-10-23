@@ -4,7 +4,7 @@ Web Research Agent - Fetches current information from the web
 import os
 from typing import List, Dict
 from tavily import TavilyClient
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 
@@ -34,20 +34,31 @@ class WebResearchAgent:
         self.synthesis_prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a research assistant that synthesizes web search results into clear, informative answers.
 
+CRITICAL INSTRUCTIONS:
+- You are synthesizing LIVE WEB SEARCH RESULTS from {current_date}
+- These results contain CURRENT, UP-TO-DATE information
+- DO NOT use your training data or mention any knowledge cutoff dates
+- DO NOT say "as of my last update" or "I don't have information after [date]"
+- The search results provided are the MOST RECENT information available
+- Base your answer ENTIRELY on the search results provided below
+- If the search results mention recent events, report them as current
+- Present information as current and factual
+
 Guidelines:
-- Provide accurate information based on the search results
+- Provide accurate information based ONLY on the search results
 - Cite sources when relevant
 - Present information in a structured, easy-to-read format
 - If results are insufficient or conflicting, acknowledge this
 - Focus on the most recent and authoritative sources
+- Use present tense for current information
 
 {conversation_context}"""),
             ("user", """Query: {query}
 
-Search Results:
+Search Results (FROM LIVE WEB SEARCH - CURRENT AS OF {current_date}):
 {search_results}
 
-Please provide a comprehensive answer based on these search results.""")
+Provide a comprehensive answer based on these CURRENT search results. Do not mention knowledge cutoffs or training data limitations.""")
         ])
     
     def search_web(self, query: str, max_results: int = 5) -> List[Dict]:
@@ -109,6 +120,10 @@ Please provide a comprehensive answer based on these search results.""")
             Dictionary with response and metadata
         """
         try:
+            # Get current date
+            from datetime import datetime
+            current_date = datetime.now().strftime("%B %d, %Y")
+            
             # Perform web search
             search_results = self.search_web(query)
             
@@ -135,7 +150,8 @@ Please provide a comprehensive answer based on these search results.""")
             response = chain.invoke({
                 "query": query,
                 "search_results": formatted_results,
-                "conversation_context": context_text
+                "conversation_context": context_text,
+                "current_date": current_date
             })
             
             # Extract sources
@@ -152,7 +168,8 @@ Please provide a comprehensive answer based on these search results.""")
                 "search_results": search_results,
                 "metadata": {
                     "num_results": len(search_results),
-                    "context_used": bool(conversation_context)
+                    "context_used": bool(conversation_context),
+                    "search_date": current_date
                 }
             }
             

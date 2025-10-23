@@ -1,7 +1,7 @@
 """
 Summarization Agent - Synthesizes final structured response
 """
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from typing import Dict, List, Optional
 
@@ -23,25 +23,36 @@ class SummarizationAgent:
 
 Your task is to take the information gathered by specialized agents and create a comprehensive, user-friendly final answer.
 
+CRITICAL FOR WEB RESEARCH:
+- If the agent_type is 'web_research', the information is CURRENT and UP-TO-DATE
+- DO NOT add disclaimers about knowledge cutoffs or training data
+- DO NOT say "as of my last update" or similar phrases
+- Present web research findings as current and factual
+- The information has been gathered from live web sources
+
 Guidelines:
 - Organize information logically with clear structure
 - Use markdown formatting for readability (headers, lists, bold text)
 - Cite sources when provided
 - Be concise but thorough
 - Highlight key insights and important numbers
-- If information is from web research, mention it's current/recent information
+- If information is from web research, present it as current/recent information
 - If information is from company documents, reference the specific documents
 - Maintain a professional yet conversational tone
+- DO NOT mention AI training dates or knowledge limitations
 
 {conversation_context}"""),
             ("user", """Original Query: {query}
+
+Agent Type: {agent_type}
+{agent_type_context}
 
 Information Gathered:
 {agent_response}
 
 {sources_text}
 
-Please provide a well-structured, comprehensive answer.""")
+Please provide a well-structured, comprehensive answer. If this is from web_research, present the information as current without mentioning knowledge cutoffs.""")
         ])
     
     def summarize(
@@ -76,11 +87,24 @@ Please provide a well-structured, comprehensive answer.""")
             if conversation_context:
                 context_text = f"Previous conversation:\n{conversation_context}\n"
             
+            # Add agent-specific context
+            agent_type_context = ""
+            if agent_type == "web_research":
+                from datetime import datetime
+                current_date = datetime.now().strftime("%B %d, %Y")
+                agent_type_context = f"This information was gathered from LIVE WEB SEARCH on {current_date}. It is CURRENT and UP-TO-DATE."
+            elif agent_type == "rag":
+                agent_type_context = "This information is from internal company documents."
+            else:
+                agent_type_context = "This information is from general knowledge."
+            
             # Generate summary
             chain = self.summary_prompt | self.llm | StrOutputParser()
             
             final_response = chain.invoke({
                 "query": query,
+                "agent_type": agent_type,
+                "agent_type_context": agent_type_context,
                 "agent_response": agent_response,
                 "sources_text": sources_text,
                 "conversation_context": context_text
